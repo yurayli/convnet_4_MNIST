@@ -80,26 +80,27 @@ def load_data_shared(filename="../data/mnist.pkl.gz"):
 #### Main class used to construct and train networks
 class Network(object):
 
-    def __init__(self, layers, mini_batch_size):
+    def __init__(self, layers):
         """Takes a list of `layers`, describing the network architecture, and
         a value for the `mini_batch_size` to be used during training
         by stochastic gradient descent.
 
         """
         self.layers = layers
-        self.mini_batch_size = mini_batch_size
         self.params = [param for layer in self.layers for param in layer.params]
+####
+    def feedforward(self, mini_batch_size):
         self.x = T.matrix("x")  # data, presented as rasterized images
         self.y = T.ivector("y")  # labels, presented as 1D vector of [int] labels
         init_layer = self.layers[0]
-        init_layer.set_inpt(self.x, self.x, self.mini_batch_size)
+        init_layer.set_inpt(self.x, self.x, mini_batch_size)
         for j in xrange(1, len(self.layers)):
             prev_layer, layer = self.layers[j-1], self.layers[j]
             layer.set_inpt(
-                prev_layer.output, prev_layer.output_dropout, self.mini_batch_size)
-        self.output = self.layers[-1].output
-        self.output_dropout = self.layers[-1].output_dropout
-
+                prev_layer.output, prev_layer.output_dropout, mini_batch_size)
+        #self.output = self.layers[-1].output
+        #self.output_dropout = self.layers[-1].output_dropout
+####
     def SGD(self, training_data, epochs, mini_batch_size, eta,
             validation_data, test_data=None, lmbda=0.0):
         """Train the network using mini-batch stochastic gradient descent."""
@@ -115,6 +116,7 @@ class Network(object):
             num_test_batches = size(test_data)/mini_batch_size
 
         # define the (regularized) cost function, symbolic gradients, and updates
+        self.feedforward(mini_batch_size)
         l2_norm_squared = sum([(layer.w**2).sum() for layer in self.layers])
         cost = self.layers[-1].cost(self)+\
                0.5*lmbda*l2_norm_squared/num_training_batches
@@ -129,32 +131,32 @@ class Network(object):
             [i], cost, updates=updates,
             givens={
                 self.x:
-                training_x[i*self.mini_batch_size: (i+1)*self.mini_batch_size],
+                training_x[i*mini_batch_size: (i+1)*mini_batch_size],
                 self.y:
-                training_y[i*self.mini_batch_size: (i+1)*self.mini_batch_size]
+                training_y[i*mini_batch_size: (i+1)*mini_batch_size]
             })
         validate_mb_accuracy = theano.function(
             [i], self.layers[-1].accuracy(self.y),
             givens={
                 self.x:
-                validation_x[i*self.mini_batch_size: (i+1)*self.mini_batch_size],
+                validation_x[i*mini_batch_size: (i+1)*mini_batch_size],
                 self.y:
-                validation_y[i*self.mini_batch_size: (i+1)*self.mini_batch_size]
+                validation_y[i*mini_batch_size: (i+1)*mini_batch_size]
             })
         if test_data:
             test_mb_accuracy = theano.function(
                 [i], self.layers[-1].accuracy(self.y),
                 givens={
                     self.x:
-                    test_x[i*self.mini_batch_size: (i+1)*self.mini_batch_size],
+                    test_x[i*mini_batch_size: (i+1)*mini_batch_size],
                     self.y:
-                    test_y[i*self.mini_batch_size: (i+1)*self.mini_batch_size]
+                    test_y[i*mini_batch_size: (i+1)*mini_batch_size]
                 })
             self.test_mb_predictions = theano.function(
                 [i], self.layers[-1].y_out,
                 givens={
                     self.x:
-                    test_x[i*self.mini_batch_size: (i+1)*self.mini_batch_size]
+                    test_x[i*mini_batch_size: (i+1)*mini_batch_size]
                 })
         
         # Do the actual training
@@ -183,17 +185,52 @@ class Network(object):
         print("Best validation accuracy of {0:.2%} obtained at iteration {1}".format(
             best_validation_accuracy, best_iteration))
 
-    def predict(self, data):
+    def predict(self, test_data):
         """Output the predicted values from trained model."""
-        data_x = data[0]
-        self.mini_batch_size = data_x.get_value().shape[0]
+        data_x = test_data[0]
+        # prediction input is a numpy array
+        self.feedforward(data_x.get_value().shape[0])
+        prediction = theano.function(
+            inputs=[self.layers[0].inpt],
+            outputs=self.layers[-1].y_out,
+            givens={self.x: data_x})
+        return prediction()
+'''
+    def predict(self, test_data):
+        """Output the predicted values from trained model."""
+        data_x = test_data[0]
+        # prediction input is a numpy array
+        mini_batch_size = data_x.shape[0]
         prediction = theano.function(
             inputs=[],
             outputs=self.layers[-1].y_out,
             givens={self.x: data_x})
         return prediction()
+'''
+    
 
+'''
+def predict(dataset, net):
+    """
+    An example of how to load a trained model and use it
+    to predict labels.
+    """
 
+    # compile a predictor function
+    predict_model = theano.function(
+        inputs=[net.input],
+        outputs=net.layers[-1].y_out)
+
+    # We can test it on some examples from test test
+    test_set_x, test_set_y = dataset[0], dataset[1]
+    test_set_x = test_set_x.get_value()
+
+    predicted_values = predict_model(test_set_x)
+    print("Predicted values for the first 10 examples in test set:")
+    print(predicted_values[:10])
+
+    return predicted_values
+'''
 #### Define layer types
 
 class ConvPoolLayer(object):
@@ -237,10 +274,11 @@ class ConvPoolLayer(object):
         self.params = [self.w, self.b]
 
     def set_inpt(self, inpt, inpt_dropout, mini_batch_size):
-        self.inpt = inpt.reshape(self.image_shape)
+        shape = tuple([mini_batch_size] + list(self.image_shape))
+        self.inpt = inpt.reshape(shape)
         conv_out = conv.conv2d(
             input=self.inpt, filters=self.w, filter_shape=self.filter_shape,
-            image_shape=self.image_shape)
+            image_shape=shape)
         pooled_out = downsample.max_pool_2d(
             input=conv_out, ds=self.poolsize, ignore_border=True)
         self.output = self.activation_fn(
