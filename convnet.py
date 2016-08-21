@@ -186,32 +186,13 @@ class Network(object):
     def predict(self, data):
         """Output the predicted values from trained model."""
         data_x = data[0]
+        self.mini_batch_size = data_x.get_value().shape[0]
         prediction = theano.function(
-        inputs=[self.x],
-        outputs=self.layers[-1].y_out)
-        return prediction(data_x)
+            inputs=[],
+            outputs=self.layers[-1].y_out,
+            givens={self.x: data_x})
+        return prediction()
 
-
-def predict(dataset, net):
-    """
-    An example of how to load a trained model and use it
-    to predict labels.
-    """
-
-    # compile a predictor function
-    predict_model = theano.function(
-        inputs=[net.input],
-        outputs=net.layers[-1].y_out)
-
-    # We can test it on some examples from test test
-    test_set_x, test_set_y = dataset[0], dataset[1]
-    test_set_x = test_set_x.get_value()
-
-    predicted_values = predict_model(test_set_x)
-    print("Predicted values for the first 10 examples in test set:")
-    print(predicted_values[:10])
-
-    return predicted_values
 
 #### Define layer types
 
