@@ -191,7 +191,7 @@ class Network(object):
         # prediction input is a numpy array
         self.feedforward(data_x.get_value().shape[0])
         prediction = theano.function(
-            inputs=[self.layers[0].inpt],
+            inputs=[],
             outputs=self.layers[-1].y_out,
             givens={self.x: data_x})
         return prediction()
