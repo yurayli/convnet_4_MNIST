@@ -173,6 +173,9 @@ class Network(object):
                                 [test_mb_accuracy(j) for j in xrange(num_test_batches)])
                             print('The corresponding test accuracy is {0:.2%}'.format(
                                 test_accuracy))
+                        # save the best model
+                        with open('best_model.pkl', 'wb') as f:
+                            pickle.dump(self, f)
                         
                 if early_stop and patience <= iter:
                     done_looping = True
@@ -188,7 +191,7 @@ class Network(object):
         data input is a theano shared variable array.
 
         """
-        self.feedforward(data_x.get_value().shape[0])
+        self.feedforward(test_data.get_value().shape[0])
         prediction = theano.function(
             inputs=[],
             outputs=self.layers[-1].y_out,

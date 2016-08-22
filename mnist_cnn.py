@@ -35,7 +35,7 @@ train_data, valid_data = shared((X, y)), shared((Xval, yval))
 ### Experiment 2
 num_epochs = 60
 mini_batch_size = 10
-eta = 0.01
+eta = 0.05
 net = cn.Network([
         cn.ConvPoolLayer(image_shape=(1, 28, 28), 
                       filter_shape=(20, 1, 5, 5), 
