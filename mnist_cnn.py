@@ -1,6 +1,12 @@
-## Using fully-connected Neural Network to train MNIST digits dataset
-## Using mini-batch SGD to optimize the NNet
+## Using Convolutional and Fully-connected Neural Nets 
+## to train MNIST digits dataset
+## Using mini-batch SGD in optimization
 
+## Libraries
+# Standard library
+import six.moves.cPickle as pickle
+
+# Third-party libraries
 import pandas as pd
 import numpy as np
 import theano
@@ -32,7 +38,25 @@ def shared(data):
 train_data, valid_data = shared((X, y)), shared((Xval, yval))
 
 
-### Experiment 2
+### Experiment 1: sigmoid
+num_epochs = 60
+mini_batch_size = 10
+eta = 0.1
+net = cn.Network([
+        cn.ConvPoolLayer(image_shape=(1, 28, 28), 
+                      filter_shape=(20, 1, 5, 5), 
+                      poolsize=(2, 2)),
+        cn.ConvPoolLayer(image_shape=(20, 12, 12), 
+                      filter_shape=(40, 20, 5, 5), 
+                      poolsize=(2, 2)),
+        cn.FullyConnectedLayer(n_in=40*4*4, n_out=100),
+        cn.SoftmaxLayer(n_in=100, n_out=10)])
+t0 = time()
+net.SGD(train_data, num_epochs, mini_batch_size, eta, valid_data, early_stop=True)
+time() - t0
+# 2302.698 sec, 99.79% train accu, 98.87% val accu, 98.94% test accu
+
+### Experiment 2: ReLU
 num_epochs = 60
 mini_batch_size = 10
 eta = 0.05
@@ -49,27 +73,9 @@ net = cn.Network([
                       activation_fn=cn.ReLU),
         cn.SoftmaxLayer(n_in=100, n_out=10)])
 t0 = time()
-net.SGD(train_data, num_epochs, mini_batch_size, eta, valid_data)
+net.SGD(train_data, num_epochs, mini_batch_size, eta, valid_data, lmbda=0.1)
 time() - t0
-
-
-### Experiment 1
-num_epochs = 60
-mini_batch_size = 10
-eta = 0.1
-net = cn.Network([
-        cn.ConvPoolLayer(image_shape=(1, 28, 28), 
-                      filter_shape=(20, 1, 5, 5), 
-                      poolsize=(2, 2)),
-        cn.ConvPoolLayer(image_shape=(20, 12, 12), 
-                      filter_shape=(40, 20, 5, 5), 
-                      poolsize=(2, 2)),
-        cn.FullyConnectedLayer(n_in=40*4*4, n_out=100),
-        cn.SoftmaxLayer(n_in=100, n_out=10)])
-t0 = time()
-net.SGD(train_data, num_epochs, mini_batch_size, eta, valid_data)
-time() - t0
-# 2302.698 sec, 99.79% train accu, 98.87% val accu, 98.94% test accu
+# 6029.097 sec, 100.00% train accu, 99.22% val accu, 99.01% test accu
 
 # Calculate training accuracy
 train_x, train_y = train_data
@@ -90,11 +96,12 @@ train_accuracy = np.mean(
 
 
 ## Write the evaluation of testset into file
-t1 = time()
 test = pd.read_csv("./test.csv").values
 test = test / 255.
 test_data = theano.shared(np.asarray(test, 
     dtype=theano.config.floatX), borrow=True)
+net = pickle.load(open('best_model.pkl'))
+t1 = time()
 pred = net.predict(test_data)
 # export Kaggle submission file
 fh = open('eval.txt','w+')

@@ -29,7 +29,7 @@ from Chris Olah (http://colah.github.io ).
 
 #### Libraries
 # Standard library
-import cPickle
+import six.moves.cPickle as pickle
 import gzip
 
 # Third-party libraries
@@ -195,7 +195,7 @@ class Network(object):
         prediction = theano.function(
             inputs=[],
             outputs=self.layers[-1].y_out,
-            givens={self.x: data_x})
+            givens={self.x: test_data})
         return prediction()
 
 
