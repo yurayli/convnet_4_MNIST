@@ -44,9 +44,9 @@ raw_input()
 ## Initializing parameters
 print '\nInitializing Neural Network Parameters ...\n'
 
-initial_Theta = []
-for i in range(num_layers-1):
-	initial_Theta.append( randInitializeWeights(nn_layers_sizes[i], nn_layers_sizes[i+1]) )
+initial_Theta = [
+	randInitializeWeights(nn_layers_sizes[i], nn_layers_sizes[i+1])
+	for i in xrange(num_layers-1)]
 
 # Unroll parameters
 initial_nn_params = np.array([])
@@ -65,7 +65,7 @@ iter = 1
 cost_train = []
 cost_val = []
 max_accu_val = 0
-def call(nn_params):
+def callback(nn_params):
 	global iter
 	global nn_layer_sizes
 	global cost_train
@@ -73,12 +73,13 @@ def call(nn_params):
 	global max_accu_val
 	Theta = []
 	num_weights = 0
-	for i in range(num_layers-1):
+	for i in xrange(num_layers-1):
 		if i == 0:
 				Theta.append( np.reshape(nn_params[0:nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
 							  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
 		else:
-			Theta.append( np.reshape(nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
+			Theta.append( 
+				np.reshape(nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
 						  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
 		num_weights += (Theta[i].shape[0]*Theta[i].shape[1])
 	pred_train = predict(Theta, X)
@@ -106,7 +107,7 @@ cost = OptResult[1]
 '''
 
 t0 = time()	
-OptResult = minimize(costFunc, initial_nn_params, method='CG', jac=gradFunc, callback=call, 
+OptResult = minimize(costFunc, initial_nn_params, method='CG', jac=gradFunc, callback=callback, 
 					 args=(nn_layers_sizes, X, y, lamb), options={'maxiter': numOfIter})
 print '\nElapsed time of training:', time()-t0, 'seconds.\n'
 
@@ -120,7 +121,7 @@ plt.show()
 # Unpack weights parameters nn_params to Theta
 Theta = []
 num_weights = 0
-for i in range(num_layers-1):
+for i in xrange(num_layers-1):
 	if i == 0:
 			Theta.append( np.reshape(nn_params[0:nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
 						  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )

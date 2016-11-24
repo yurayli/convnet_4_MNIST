@@ -37,6 +37,7 @@ import numpy as np
 import theano
 import theano.tensor as T
 from theano.tensor.nnet import conv
+#from theano.tensor.signal import conv
 from theano.tensor.nnet import softmax
 from theano.tensor import shared_randomstreams
 from theano.tensor.signal import downsample
@@ -52,13 +53,13 @@ from theano.tensor import tanh
 GPU = False
 if GPU:
     print "Trying to run under a GPU.  If this is not desired, then modify "+\
-        "network3.py\nto set the GPU flag to False."
+        "the GPU flag to False."
     try: theano.config.device = 'gpu'
     except: pass # it's already set
     theano.config.floatX = 'float32'
 else:
     print "Running with a CPU.  If this is not desired, then the modify "+\
-        "network3.py to set\nthe GPU flag to True."
+        "the GPU flag to True."
 
 
 #### Main class used to construct and train networks
@@ -156,7 +157,7 @@ class Network(object):
                 if iter % 1000 == 0:
                     print("Training mini-batch number {0}".format(iter))
                 cost_ij = train_mb(minibatch_index)
-                if (iter) % num_train_batches == 0:
+                if iter % num_train_batches == 0:
                     valid_accuracy = np.mean(
                         [validate_mb_accuracy(j) for j in xrange(num_valid_batches)])
                     print("Epoch {0}: validation accuracy {1:.2%}".format(
@@ -174,7 +175,7 @@ class Network(object):
                             print('The corresponding test accuracy is {0:.2%}'.format(
                                 test_accuracy))
                         # save the best model
-                        with open('best_model.pkl', 'wb') as f:
+                        with open('th_best_model.pkl', 'wb') as f:
                             pickle.dump(self, f)
                         
                 if early_stop and patience <= iter:
@@ -227,12 +228,12 @@ class ConvPoolLayer(object):
         self.filter_shape = filter_shape
         self.image_shape = image_shape
         self.poolsize = poolsize
-        self.activation_fn=activation_fn
+        self.activation_fn = activation_fn
         # initialize weights and biases
-        n_out = (filter_shape[0]*np.prod(filter_shape[2:])/np.prod(poolsize))
+        n_in = (filter_shape[0]*np.prod(filter_shape[2:])/np.prod(poolsize))
         self.w = theano.shared(
             np.asarray(
-                np.random.normal(loc=0, scale=np.sqrt(1.0/n_out), size=filter_shape),
+                np.random.normal(loc=0, scale=np.sqrt(1.0/n_in), size=filter_shape),
                 dtype=theano.config.floatX),
             borrow=True)
         self.b = theano.shared(
@@ -265,7 +266,7 @@ class FullyConnectedLayer(object):
         self.w = theano.shared(
             np.asarray(
                 np.random.normal(
-                    loc=0.0, scale=np.sqrt(1.0/n_out), size=(n_in, n_out)),
+                    loc=0.0, scale=np.sqrt(1.0/n_in), size=(n_in, n_out)),
                 dtype=theano.config.floatX),
             name='w', borrow=True)
         self.b = theano.shared(
@@ -320,7 +321,7 @@ class SoftmaxLayer(object):
         return T.mean(T.eq(y, self.y_out))
 
 
-#### Miscellanea
+#### Helper functions
 def size(data):
     "Return the number of samples of the dataset `data`."
     return data[0].get_value(borrow=True).shape[0]

@@ -25,57 +25,102 @@ Xval = Xval / 255.
 X = X / 255.
 
 def shared(data):
-        """Place the data into shared variables.  This allows Theano to copy
-        the data to the GPU, if one is available.
+    """Place the data into shared variables.  This allows Theano to copy
+       the data to the GPU, if one is available.
 
-        """
-        shared_x = theano.shared(
-            np.asarray(data[0], dtype=theano.config.floatX), borrow=True)
-        shared_y = theano.shared(
-            np.asarray(data[1], dtype=theano.config.floatX), borrow=True)
-        return shared_x, T.cast(shared_y, "int32")
+    """
+    shared_x = theano.shared(
+      np.asarray(data[0], dtype=theano.config.floatX), borrow=True)
+    shared_y = theano.shared(
+      np.asarray(data[1], dtype=theano.config.floatX), borrow=True)
+    return shared_x, T.cast(shared_y, "int32")
 
 train_data, valid_data = shared((X, y)), shared((Xval, yval))
 
 
+### Experiment 4:
+num_epochs = 20
+mini_batch_size = 10
+eta = 0.05
+net = cn.Network([
+    cn.ConvPoolLayer(image_shape=(1, 28, 28), 
+                  filter_shape=(20, 1, 5, 5), 
+                  poolsize=(2, 2),
+                  activation_fn=cn.ReLU),
+    cn.ConvPoolLayer(image_shape=(20, 12, 12), 
+                  filter_shape=(40, 20, 5, 5), 
+                  poolsize=(2, 2),
+                  activation_fn=cn.ReLU),
+    cn.FullyConnectedLayer(n_in=40*4*4, n_out=100,
+                  activation_fn=cn.ReLU, p_dropout=0.5),
+    cn.SoftmaxLayer(n_in=100, n_out=10, p_dropout=0.5)])
+t0 = time()
+net.SGD(train_data, num_epochs, mini_batch_size, eta, valid_data, lmbda=0.001)
+time() - t0
+# 1826.49 sec, 99.52% train accu, 99.22% val accu, 98.986% test accu
+
+
+'''
 ### Experiment 1: sigmoid
 num_epochs = 60
 mini_batch_size = 10
 eta = 0.1
 net = cn.Network([
-        cn.ConvPoolLayer(image_shape=(1, 28, 28), 
-                      filter_shape=(20, 1, 5, 5), 
-                      poolsize=(2, 2)),
-        cn.ConvPoolLayer(image_shape=(20, 12, 12), 
-                      filter_shape=(40, 20, 5, 5), 
-                      poolsize=(2, 2)),
-        cn.FullyConnectedLayer(n_in=40*4*4, n_out=100),
-        cn.SoftmaxLayer(n_in=100, n_out=10)])
+    cn.ConvPoolLayer(image_shape=(1, 28, 28), 
+                  filter_shape=(20, 1, 5, 5), 
+                  poolsize=(2, 2)),
+    cn.ConvPoolLayer(image_shape=(20, 12, 12), 
+                  filter_shape=(40, 20, 5, 5), 
+                  poolsize=(2, 2)),
+    cn.FullyConnectedLayer(n_in=40*4*4, n_out=100),
+    cn.SoftmaxLayer(n_in=100, n_out=10)])
 t0 = time()
 net.SGD(train_data, num_epochs, mini_batch_size, eta, valid_data, early_stop=True)
 time() - t0
 # 2302.698 sec, 99.79% train accu, 98.87% val accu, 98.94% test accu
 
-### Experiment 2: ReLU
-num_epochs = 60
+### Experiment 2: ReLU and Dropout
+num_epochs = 40
 mini_batch_size = 10
 eta = 0.05
 net = cn.Network([
-        cn.ConvPoolLayer(image_shape=(1, 28, 28), 
-                      filter_shape=(20, 1, 5, 5), 
-                      poolsize=(2, 2),
-                      activation_fn=cn.ReLU),
-        cn.ConvPoolLayer(image_shape=(20, 12, 12), 
-                      filter_shape=(40, 20, 5, 5), 
-                      poolsize=(2, 2),
-                      activation_fn=cn.ReLU),
-        cn.FullyConnectedLayer(n_in=40*4*4, n_out=100,
-                      activation_fn=cn.ReLU),
-        cn.SoftmaxLayer(n_in=100, n_out=10)])
+    cn.ConvPoolLayer(image_shape=(1, 28, 28), 
+                  filter_shape=(20, 1, 5, 5), 
+                  poolsize=(2, 2),
+                  activation_fn=cn.ReLU),
+    cn.ConvPoolLayer(image_shape=(20, 12, 12), 
+                  filter_shape=(40, 20, 5, 5), 
+                  poolsize=(2, 2),
+                  activation_fn=cn.ReLU),
+    cn.FullyConnectedLayer(n_in=40*4*4, n_out=100,
+                  activation_fn=cn.ReLU, p_dropout=0.5),
+    cn.SoftmaxLayer(n_in=100, n_out=10, p_dropout=0.5)])
 t0 = time()
 net.SGD(train_data, num_epochs, mini_batch_size, eta, valid_data, lmbda=0.1)
 time() - t0
-# 6029.097 sec, 100.00% train accu, 99.22% val accu, 99.01% test accu
+# 3972.386 sec, 99.73% train accu, 99.32% val accu, 99.014% test accu
+
+### Experiment 3:
+num_epochs = 20
+mini_batch_size = 10
+eta = 0.05
+net = cn.Network([
+    cn.ConvPoolLayer(image_shape=(1, 28, 28), 
+                  filter_shape=(20, 1, 5, 5), 
+                  poolsize=(2, 2),
+                  activation_fn=cn.ReLU),
+    cn.ConvPoolLayer(image_shape=(20, 12, 12), 
+                  filter_shape=(40, 20, 5, 5), 
+                  poolsize=(2, 2),
+                  activation_fn=cn.ReLU),
+    cn.FullyConnectedLayer(n_in=40*4*4, n_out=100,
+                  activation_fn=cn.ReLU, p_dropout=0.5),
+    cn.SoftmaxLayer(n_in=100, n_out=10, p_dropout=0.5)])
+t0 = time()
+net.SGD(train_data, num_epochs, mini_batch_size, eta, valid_data, lmbda=0.001)
+time() - t0
+# 1826.49 sec, 99.52% train accu, 99.22% val accu, 98.986% test accu
+
 
 # Calculate training accuracy
 train_x, train_y = train_data
@@ -92,7 +137,7 @@ train_mb_accuracy = theano.function(
 
 train_accuracy = np.mean(
     [train_mb_accuracy(j) for j in xrange(num_train_batches)])
-
+'''
 
 
 ## Write the evaluation of testset into file
@@ -100,7 +145,7 @@ test = pd.read_csv("./test.csv").values
 test = test / 255.
 test_data = theano.shared(np.asarray(test, 
     dtype=theano.config.floatX), borrow=True)
-net = pickle.load(open('best_model.pkl'))
+net = pickle.load(open('th_best_model.pkl'))
 t1 = time()
 pred = net.predict(test_data)
 # export Kaggle submission file
