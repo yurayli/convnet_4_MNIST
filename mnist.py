@@ -17,7 +17,7 @@ hid_layer2_size = 49
 hid_layer3_size = 25
 num_labels = 10           # 10 labels, from 0 to 9
                           
-nn_layers_sizes = [input_layer_size, hid_layer1_size, hid_layer2_size, num_labels]
+nn_layers_sizes = [input_layer_size, hid_layer2_size, num_labels]
 num_layers = len(nn_layers_sizes)
 
 ## read data from CSV file 
@@ -57,7 +57,7 @@ for i, Theta in enumerate(initial_Theta):
 ## Training NN
 print '\nTraining Neural Network... \n'
 
-lamb = .1
+lmbda = .1
 numOfIter = 500
 
 # Create "short hand" for the cost function to be minimized
@@ -74,21 +74,17 @@ def callback(nn_params):
 	Theta = []
 	num_weights = 0
 	for i in xrange(num_layers-1):
-		if i == 0:
-				Theta.append( np.reshape(nn_params[0:nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
-							  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
-		else:
-			Theta.append( 
-				np.reshape(nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
-						  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
-		num_weights += (Theta[i].shape[0]*Theta[i].shape[1])
+		Theta.append(
+			nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])].reshape(
+				nn_layers_sizes[i+1], 1 + nn_layers_sizes[i]) )
+		num_weights += np.prod(Theta[i].shape)
 	pred_train = predict(Theta, X)
 	pred_val = predict(Theta, Xval)
 	accu_train = np.mean((pred_train == y.ravel()).astype(float)) * 100
 	accu_val = np.mean((pred_val == yval.ravel()).astype(float)) * 100
 	
-	cost_train.append(costFunc(nn_params, nn_layers_sizes, X, y, lamb))
-	cost_val.append(costFunc(nn_params, nn_layers_sizes, Xval, yval, lamb))
+	cost_train.append(costFunc(nn_params, nn_layers_sizes, X, y, lmbda))
+	cost_val.append(costFunc(nn_params, nn_layers_sizes, Xval, yval, lmbda))
 	print '\nIter {0}: accu_train = {1}, accu_val = {2}'.format(iter, \
 		accu_train, accu_val)
 	if accu_val > max_accu_val:
@@ -99,7 +95,7 @@ def callback(nn_params):
 '''
 t0 = time()
 OptResult = fmin_cg(costFunc, initial_nn_params, maxiter=100, fprime=gradFunc, 
-					 args=(nn_layers_sizes, X, y, lamb), full_output=True)
+					 args=(nn_layers_sizes, X, y, lmbda), full_output=True)
 print '\nElapsed time of training:', time()-t0, 'seconds.\n'
 
 nn_params = OptResult[0]
@@ -108,7 +104,7 @@ cost = OptResult[1]
 
 t0 = time()	
 OptResult = minimize(costFunc, initial_nn_params, method='CG', jac=gradFunc, callback=callback, 
-					 args=(nn_layers_sizes, X, y, lamb), options={'maxiter': numOfIter})
+					 args=(nn_layers_sizes, X, y, lmbda), options={'maxiter': numOfIter})
 print '\nElapsed time of training:', time()-t0, 'seconds.\n'
 
 nn_params = OptResult.x
@@ -122,13 +118,10 @@ plt.show()
 Theta = []
 num_weights = 0
 for i in xrange(num_layers-1):
-	if i == 0:
-			Theta.append( np.reshape(nn_params[0:nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
-						  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
-	else:
-		Theta.append( np.reshape(nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
-					  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
-	num_weights += (Theta[i].shape[0]*Theta[i].shape[1])
+	Theta.append( 
+		nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])].reshape(
+			nn_layers_sizes[i+1], 1 + nn_layers_sizes[i]) )
+	num_weights += np.prod(Theta[i].shape)
 
 print 'Program paused. Press enter to continue.\n'
 raw_input()
@@ -147,10 +140,10 @@ test = (test-128.) / 128.
 pred = predict(Theta, test)
 # accu = 0.9996 for 4 layers with 500 iter and elapsed training time 1452.52 sec, [784 100 49 10]
 #
-# accu_val = 0.9638 for 4 layers with 500 iter, lamb = 1.
+# accu_val = 0.9638 for 4 layers with 500 iter, lmbda = 1.
 # and elapsed training time xx sec, [784 100 49 10]
 #
-# accu_val = 0.968 for 4 layers with 500 iter, lamb = .1
+# accu_val = 0.968 for 4 layers with 500 iter, lmbda = .1
 # and elapsed training time xx sec, [784 100 49 10]
 #
 # accu = 0.9999 for 5 layers with 1000 iter and elapsed training time 2690.88 sec, [784 81 49 25 10]

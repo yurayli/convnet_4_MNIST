@@ -19,25 +19,29 @@ def forward(Theta, nn_layers_sizes, X, y):
 	# Setup some useful variables
 	num_layers = len(nn_layers_sizes)
 	m = X.shape[0]
+	
 	# Feed forward
 	X = np.hstack([np.ones((m, 1)), X])
-	hidUnits = []
-	hidUnits.append( sigmoid(np.dot(X, Theta[0].T)) )
-	hidUnits[0] = np.hstack([np.ones((m, 1)), hidUnits[0]])
-	if num_layers > 3:
-		for l in range(1, num_layers-2):
-			hidUnits.append( sigmoid(np.dot(hidUnits[l-1], Theta[l].T)) )
-			hidUnits[l] = np.hstack([np.ones((m, 1)), hidUnits[l]])
-	H = sigmoid(np.dot(hidUnits[-1], Theta[-1].T))
+	units = []
+	units.append( sigmoid(X.dot(Theta[0].T)) )
+	units[0] = np.hstack([np.ones((m, 1)), units[0]])
+	for l in range(1, num_layers-1):
+		units.append( sigmoid(units[l-1].dot(Theta[l].T)) )
+		# final output layer need not patch ones
+		if l != (num_layers-2):
+			units[l] = np.hstack([np.ones((m, 1)), units[l]])
+	H = units[-1]  # output hypothesis
+	
+	# One-hot encoding of labels
 	encode_y = np.zeros((m, nn_layers_sizes[-1]))
 	for i in range(m):
 		encode_y[i,y[i]] += 1
 	
-	return H, encode_y, hidUnits
+	return H, encode_y, units
 
 
 # Objective function
-def costFunc(nn_params, nn_layers_sizes, X, y, lamb):
+def costFunc(nn_params, nn_layers_sizes, X, y, lmbda):
 	# Setup some useful variables
 	m = X.shape[0]
 	num_layers = len(nn_layers_sizes)
@@ -46,13 +50,10 @@ def costFunc(nn_params, nn_layers_sizes, X, y, lamb):
 	Theta = []
 	num_weights = 0
 	for i in range(num_layers-1):
-		if i == 0:
-			Theta.append( np.reshape(nn_params[0:nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
-						  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
-		else:
-			Theta.append( np.reshape(nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
-						  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
-		num_weights += (Theta[i].shape[0]*Theta[i].shape[1])
+		Theta.append(
+			nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])].reshape(
+				nn_layers_sizes[i+1], 1 + nn_layers_sizes[i]) )
+		num_weights += np.prod(Theta[i].shape)
 	
 	# Feedforward and return the cost function
 	H, encode_y, _ = forward(Theta, nn_layers_sizes, X, y)
@@ -60,14 +61,14 @@ def costFunc(nn_params, nn_layers_sizes, X, y, lamb):
 	sumThetaSquare = 0
 	for i in range(num_layers-1):
 		sumThetaSquare += np.sum(Theta[i][:,1:] ** 2)
-	regularFactor = sumThetaSquare * lamb/(2*m)
+	regularFactor = sumThetaSquare * lmbda/(2*m)
 	J = (1./m) * np.sum(cost) + regularFactor
 	
 	return J
 	
 
 # Gradient of objective function
-def gradFunc(nn_params, nn_layers_sizes, X, y, lamb):
+def gradFunc(nn_params, nn_layers_sizes, X, y, lmbda):
 	# Setup some useful variables
 	m = X.shape[0]
 	num_layers = len(nn_layers_sizes)
@@ -76,43 +77,36 @@ def gradFunc(nn_params, nn_layers_sizes, X, y, lamb):
 	Theta = []
 	num_weights = 0
 	for i in range(num_layers-1):
-		if i == 0:
-			Theta.append( np.reshape(nn_params[0:nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
-						  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
-		else:
-			Theta.append( np.reshape(nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])], 
-						  (nn_layers_sizes[i+1], 1 + nn_layers_sizes[i])) )
+		Theta.append(
+			nn_params[num_weights:num_weights + nn_layers_sizes[i+1]*(1 + nn_layers_sizes[i])].reshape(
+				nn_layers_sizes[i+1], 1 + nn_layers_sizes[i]) )
 		num_weights += (Theta[i].shape[0]*Theta[i].shape[1])
 	
-	# To be returned variables
+	# To be returned gradients
 	Theta_grad = []
 	for i in range(num_layers-1):
 		Theta_grad.append( np.zeros(Theta[i].shape) )
 	
 	# Backpropagation algorithm and return the gradient of the cost function
-	H, encode_y, hidUnits = forward(Theta, nn_layers_sizes, X, y)
+	H, encode_y, units = forward(Theta, nn_layers_sizes, X, y)
 	X = np.hstack([np.ones((m, 1)), X])
-	delH = H - encode_y
-	Theta_grad[-1] = np.dot(delH.T, hidUnits[-1])
-	delHid = []
+	delUnits = []
+	delUnits.append( H - encode_y )
+	Theta_grad[-1] = delUnits[0].T.dot(units[-2])
 	for l in range(num_layers-2,0,-1):
-		if l == num_layers-2:
-			delHid.append( np.dot(delH, Theta[l]) * (hidUnits[l-1]*(1-hidUnits[l-1])) )
-			delHid[-1] = delHid[-1][:,1:]
-		else:
-			delHiddTmp = np.dot(delHid[0], Theta[l]) * (hidUnits[l-1]*(1-hidUnits[l-1]))
-			delHiddTmp = [ delHiddTmp[:,1:] ]
-			delHid = delHiddTmp + delHid
-		
+		# backward pass error signal, first term of chain rule: (dJ/dz)(dz/dTheta)
+		delUnits.insert(0, (delUnits[0].dot(Theta[l]) * (units[l-1]*(1-units[l-1])))[:,1:])
+
+		# second term of chain rule: (dJ/dz)(dz/dTheta)
 		if l != 1:
-			Theta_grad[l-1] = np.dot(delHid[0].T, hidUnits[l-2])  # new delhid (i.e., index 0) is required here in each loop
+			Theta_grad[l-1] = delUnits[0].T.dot(units[l-2])  # new delhid (i.e., index 0) is required here in each loop
 		else:
-			Theta_grad[l-1] = np.dot(delHid[0].T, X)
-		
+			Theta_grad[l-1] = delUnits[0].T.dot(X)
+
 	# Regularization
 	for i in range(num_layers-1):
 		Theta_grad[i] *= (1./m)
-		Theta_grad[i][:,1:] += ((lamb/m) * Theta[i][:,1:])
+		Theta_grad[i][:,1:] += ((lmbda/m) * Theta[i][:,1:])
 	
 	# Pack gradient of weights Theta_grad to grad
 	grad = np.array([])
