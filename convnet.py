@@ -24,13 +24,13 @@ import gzip
 
 # Third-party libraries
 import numpy as np
+import scipy
 import theano
 import theano.tensor as T
 from theano.tensor.nnet import conv
-#from theano.tensor.signal import conv
 from theano.tensor.nnet import softmax
 from theano.tensor import shared_randomstreams
-from theano.tensor.signal import downsample
+from theano.tensor.signal import pool
 
 # Activation functions for neurons
 def linear(z): return z
@@ -65,7 +65,7 @@ class Network(object):
         self.layers = layers
         self.params = [param for layer in self.layers for param in layer.params]
 
-    
+
     def feedforward(self, mini_batch_size):
         self.x = T.matrix("x")  # data, presented as rasterized images
         self.y = T.ivector("y")  # labels, presented as 1D vector of [int] labels
@@ -76,9 +76,9 @@ class Network(object):
             layer.set_inpt(
                 prev_layer.output, prev_layer.output_dropout, mini_batch_size)
 
-    
-    def SGD(self, train_data, epochs, mini_batch_size, eta,
-            valid_data, test_data=None, lmbda=0.0, early_stop=False):
+
+    def fit(self, train_data, epochs, mini_batch_size, eta,
+            valid_data, test_data=None, lmbda=0.0, early_stop=False, optim_mode='gd'):
         """Train the network using mini-batch stochastic gradient descent."""
         train_x, train_y = train_data
         valid_x, valid_y = valid_data
@@ -86,7 +86,8 @@ class Network(object):
             test_x, test_y = test_data
 
         ## Compute number of minibatches for training, validation and testing
-        num_train_batches = size(train_data)/mini_batch_size
+        dataSize = size(train_data)
+        num_train_batches = dataSize/mini_batch_size
         num_valid_batches = size(valid_data)/mini_batch_size
         if test_data:
             num_test_batches = size(test_data)/mini_batch_size
@@ -95,10 +96,13 @@ class Network(object):
         self.feedforward(mini_batch_size)
         l2_norm_squared = sum([(layer.w**2).sum() for layer in self.layers])
         cost = self.layers[-1].cost(self)+\
-               0.5*lmbda*l2_norm_squared/num_train_batches
-        grads = T.grad(cost, self.params)
-        updates = [(param, param-eta*grad)
-                   for param, grad in zip(self.params, grads)]
+               0.5*lmbda*l2_norm_squared/mini_batch_size
+        if optim_mode=='gd':
+            grads = T.grad(cost, self.params)
+            updates = [(param, param-eta*grad)
+                        for param, grad in zip(self.params, grads)]
+        if optim_mode=='adam':
+            updates = Adam(cost, self.params)
 
         ## Set functions to train a mini-batch, and to compute the
         ## accuracy in validation and test mini-batches.
@@ -128,7 +132,10 @@ class Network(object):
                     self.y:
                     test_y[i*mini_batch_size: (i+1)*mini_batch_size]
                 })
-        
+        orderMask = T.ivector()
+        shuffleData = theano.function([orderMask], None, updates=[(train_x, train_x[orderMask])])
+        shuffleLabel = theano.function([orderMask], None, updates=[(train_y, train_y[orderMask])])            
+
         ## Train the model
         print("\nStart training......\n")
         # Early-stopping parameters
@@ -165,12 +172,16 @@ class Network(object):
                             print('The corresponding test accuracy is {0:.2%}'.format(
                                 test_accuracy))
                         # save the best model
-                        with open('th_best_model.pkl', 'wb') as f:
+                        with open('best_model.pkl', 'wb') as f:
                             pickle.dump(self, f)
                         
                 if early_stop and patience <= iter:
                     done_looping = True
                     break
+            # shuffle the data
+            order = np.random.permutation(np.arange(dataSize, dtype=np.int32))
+            shuffleData(order)
+            shuffleLabel(order)
         
         print("Finished training network.")
         print("Best validation accuracy of {0:.2%} obtained at iteration {1}".format(
@@ -202,7 +213,7 @@ class ConvPoolLayer(object):
     """
 
     def __init__(self, filter_shape, image_shape, poolsize=(2, 2),
-                 activation_fn=sigmoid):
+                 activation_fn=sigmoid, init='trunc_normal'):
         """`filter_shape` is a tuple of length 4, whose entries are the number
         of filters, the number of input feature maps, the filter height, and the
         filter width.
@@ -220,15 +231,30 @@ class ConvPoolLayer(object):
         self.poolsize = poolsize
         self.activation_fn = activation_fn
         # initialize weights and biases
-        n_in = (filter_shape[0]*np.prod(filter_shape[2:])/np.prod(poolsize))
-        self.w = theano.shared(
-            np.asarray(
-                np.random.normal(loc=0, scale=np.sqrt(1.0/n_in), size=filter_shape),
-                dtype=theano.config.floatX),
-            borrow=True)
+        fan_in = filter_shape[1] * np.prod(filter_shape[2:])
+        fan_out = filter_shape[0] * np.prod(filter_shape[2:])
+        if init=='glorot_uniform':
+            self.w = theano.shared(
+                np.asarray(
+                    np.random.uniform(-0.15, 0.15, size=filter_shape),
+                    dtype=theano.config.floatX),
+                borrow=True)
+        if init=='trunc_normal':
+            self.w = theano.shared(
+                np.asarray(
+                    scipy.stats.truncnorm.rvs(-2, 2, loc=0, scale=0.1, size=filter_shape),
+                    dtype=theano.config.floatX),
+                borrow=True)
+        if init=='normal':
+            self.w = theano.shared(
+                np.asarray(
+                    np.random.normal(
+                        loc=0.0, scale=0.05, size=filter_shape),
+                    dtype=theano.config.floatX),
+                borrow=True)
         self.b = theano.shared(
             np.asarray(
-                np.random.normal(loc=0, scale=1.0, size=(filter_shape[0],)),
+                np.zeros((filter_shape[0],)),
                 dtype=theano.config.floatX),
             borrow=True)
         self.params = [self.w, self.b]
@@ -239,8 +265,8 @@ class ConvPoolLayer(object):
         conv_out = conv.conv2d(
             input=self.inpt, filters=self.w, filter_shape=self.filter_shape,
             image_shape=shape)
-        pooled_out = downsample.max_pool_2d(
-            input=conv_out, ds=self.poolsize, ignore_border=True)
+        pooled_out = pool.pool_2d(
+            input=conv_out, ds=self.poolsize, ignore_border=True, mode='max')
         self.output = self.activation_fn(
             pooled_out + self.b.dimshuffle('x', 0, 'x', 'x'))
         self.output_dropout = self.output # no dropout in the convolutional layers
@@ -256,12 +282,11 @@ class FullyConnectedLayer(object):
         self.w = theano.shared(
             np.asarray(
                 np.random.normal(
-                    loc=0.0, scale=np.sqrt(1.0/n_in), size=(n_in, n_out)),
+                    loc=0.0, scale=np.sqrt(2.0/n_in), size=(n_in, n_out)),
                 dtype=theano.config.floatX),
             name='w', borrow=True)
         self.b = theano.shared(
-            np.asarray(np.random.normal(loc=0.0, scale=1.0, size=(n_out,)),
-                       dtype=theano.config.floatX),
+            np.zeros((n_out,), dtype=theano.config.floatX),
             name='b', borrow=True)
         self.params = [self.w, self.b]
 
@@ -322,3 +347,24 @@ def dropout_layer(layer, p_dropout):
     mask = srng.binomial(n=1, p=1-p_dropout, size=layer.shape)
     return layer*T.cast(mask, theano.config.floatX)
 
+def Adam(cost, params, lr=0.001, beta1=0.9, beta2=0.999, e=1e-8):
+    # see the paper https://arxiv.org/abs/1412.6980
+    updates = []
+    grads = T.grad(cost, params)
+    t = theano.shared(np.float32(1))
+    lr_t = lr * T.sqrt(1 - beta2**t)/(1 - beta1**t)
+    e_hat = e * T.sqrt(1 - beta2**t)
+    for param, grad in zip(params, grads):
+        m = theano.shared(np.zeros(param.get_value().shape, dtype=theano.config.floatX))
+        v = theano.shared(np.zeros(param.get_value().shape, dtype=theano.config.floatX))
+        m_t = ((1 - beta1) * grad) + (beta1 * m)  # Update biased first moment estimate
+        v_t = ((1 - beta2) * T.sqr(grad)) + (beta2 * v)  # Update biased second raw moment estimate
+        #m_hat = m_t / (1 - beta1**t)  # Compute bias-corrected first moment estimate
+        #v_hat = v_t / (1 - beta2**t)  # Compute bias-corrected second raw moment estimate
+        grad_t = m_t / (T.sqrt(v_t) + e_hat)
+        param_t = param - (lr_t * grad_t)  # Update parameters
+        updates.append((m, m_t))
+        updates.append((v, v_t))
+        updates.append((param, param_t))
+    updates.append((t, t+1))
+    return updates
