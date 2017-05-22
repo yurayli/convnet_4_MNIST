@@ -119,7 +119,7 @@ cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits, y)) + \
         tf.div(lmbda*l2_norm_squared, tf.to_float(tf.shape(x)[0]))
 optimizer = tf.train.AdamOptimizer(learning_rate=0.001).minimize(cost)
 #optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate).minimize(cost)
-pred = tf.argmax(tf.nn.softmax(feedforward(x, weights, biases, drop_param)), 1)
+pred = tf.argmax(tf.nn.softmax(logits), 1)
 accu = tf.reduce_mean(tf.cast( tf.equal(pred, tf.argmax(y, 1)), tf.float32 ))
 
 ## Start training!
@@ -196,6 +196,3 @@ for i in xrange(len(pred_test)):
 fh.close()
 print "Complete!"
 
-# 1744.51 sec, tr_acc=.9976, val_acc=.9897, test_acc=.9896
-# 851.794 sec, tr_acc=.9962, val_acc=.9890
-# 859.85 sec, tr_acc=.9969, val_acc=.9895
